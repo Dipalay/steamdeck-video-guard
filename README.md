@@ -23,7 +23,7 @@ When playing high-bitrate video (such as YouTube 1440p60 stream recordings at 2x
 Open **Konsole** in Desktop Mode, paste the following command, and hit Enter:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/YOUR_USERNAME/steamdeck-video-guard/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/Dipalay/steamdeck-video-guard/main/install.sh | bash
 ```
 
 *(Replace `YOUR_USERNAME` with your GitHub username).*
