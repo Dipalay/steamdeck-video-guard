@@ -26,8 +26,6 @@ Open **Konsole** in Desktop Mode, paste the following command, and hit Enter:
 curl -sSL https://raw.githubusercontent.com/Dipalay/steamdeck-video-guard/main/install.sh | bash
 ```
 
-*(Replace `YOUR_USERNAME` with your GitHub username).*
-
 ---
 
 ## 🔍 Verification
