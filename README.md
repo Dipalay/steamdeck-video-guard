@@ -47,5 +47,5 @@ You should see: `Active: active (running)`.
 If Valve ever patches this natively in SteamOS and you wish to remove the service:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/YOUR_USERNAME/steamdeck-video-guard/main/uninstall.sh | bash
+curl -sSL https://raw.githubusercontent.com/Dipalay/steamdeck-video-guard/main/uninstall.sh | bash
 ```
