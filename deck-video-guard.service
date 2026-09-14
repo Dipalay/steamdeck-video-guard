@@ -1,0 +1,14 @@
+[Unit]
+Description=Steam Deck Video Guard (APU Stability Keeper for Video Playback & Editing)
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/home/deck/.local/bin/deck-video-guard.py
+Restart=always
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=3
+
+[Install]
+WantedBy=default.target
