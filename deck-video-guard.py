@@ -1,36 +1,27 @@
 #!/usr/bin/env python3
 """
-Steam Deck Video Guard v2 (APU & DPM Stability Keeper)
+Steam Deck Video Guard v2 (Clean DPM Governor)
 Prevents APU brownouts, GPU lockups, and VCN driver timeouts during video playback/editing.
 
-Key Architecture:
-1. Dynamic DPM Profile Management:
-   - When hardware video decoding (VCN) or media apps (Kdenlive, VLC, OBS, etc.) are active,
-     it elevates GPU power_dpm_force_performance_level to 'profile_standard' (fixed stable 1100MHz).
-   - This physically eliminates the 200MHz low-voltage C-state droop (brownout) under sudden 120 FPS decode bursts.
-   - Automatically drops back to 'auto' (power-saving mode) 5 seconds after playback stops.
-2. Hardware SMU Keep-Alive Heartbeat:
-   - Periodically queries amdgpu hwmon telemetry (in0_input voltage, power1_input, temp1_input),
-     forcing the AMD System Management Unit to actively maintain voltage regulator responsiveness.
-3. Universal Process Detection:
-   - Detects both native apps and containerized Flatpak apps (inspecting /proc/*/comm and cmdline).
-
-Zero-overhead, runs as a user systemd service.
+How it works:
+- When video decoding (VCN) or video editing (Kdenlive/melt, VLC, OBS, Chrome) is detected,
+  it sets GPU power_dpm_force_performance_level to 'profile_standard' (stable 1100MHz).
+- This eliminates the 200MHz low-voltage C-state droop (brownout) under high-FPS bursts.
+- ZERO SMU sensor polling spam: does NOT spam in0_input/power1_input, completely preventing
+  microcontroller mailbox congestion or bus deadlocks.
+- Automatically reverts to 'auto' 5 seconds after playback stops.
 """
 
 import os
 import sys
 import time
-import glob
 import signal
 
 DRM_DEV = "/sys/class/drm/card0/device"
 VCN_BUSY_PATH = os.path.join(DRM_DEV, "vcn_busy_percent")
-GPU_BUSY_PATH = os.path.join(DRM_DEV, "gpu_busy_percent")
-SCLK_PATH = os.path.join(DRM_DEV, "pp_dpm_sclk")
-VCLK_PATH = os.path.join(DRM_DEV, "pp_dpm_vclk")
 PERF_LEVEL_PATH = os.path.join(DRM_DEV, "power_dpm_force_performance_level")
 
+# Video creation, playback, and streaming applications
 MEDIA_APPS = {
     # Video Editing & Rendering Engines
     "kdenlive", "melt", "shotcut", "resolve", "davinci", "obs", "obs64", "ffmpeg",
@@ -74,18 +65,6 @@ def write_val(path, val):
     except Exception:
         return False
 
-def find_amdgpu_hwmon():
-    for h in glob.glob("/sys/class/hwmon/hwmon*"):
-        try:
-            with open(os.path.join(h, "name"), "r") as f:
-                if f.read().strip() == "amdgpu":
-                    return h
-        except Exception:
-            pass
-    return None
-
-hwmon_dir = find_amdgpu_hwmon()
-
 def is_vcn_active():
     val = read_val(VCN_BUSY_PATH)
     return val.isdigit() and int(val) > 0
@@ -116,22 +95,6 @@ def set_gpu_profile(target_level):
     except Exception:
         pass
 
-def keep_alive_pulse():
-    global hwmon_dir
-    # 1. DRM hardware state poll
-    _ = read_val(VCN_BUSY_PATH)
-    _ = read_val(GPU_BUSY_PATH)
-    _ = read_val(SCLK_PATH)
-    _ = read_val(VCLK_PATH)
-
-    # 2. Hardware SMU telemetry poll (triggers active power rail management)
-    if not hwmon_dir or not os.path.exists(hwmon_dir):
-        hwmon_dir = find_amdgpu_hwmon()
-    if hwmon_dir:
-        _ = read_val(os.path.join(hwmon_dir, "in0_input"))      # GPU vddgfx voltage
-        _ = read_val(os.path.join(hwmon_dir, "power1_input"))   # GPU power draw
-        _ = read_val(os.path.join(hwmon_dir, "temp1_input"))    # GPU temperature
-
 def main():
     global running
     last_proc_check = 0
@@ -151,15 +114,13 @@ def main():
 
             if vcn_active or media_app_running:
                 # Video or editing app is active!
-                # Keep active for 5 seconds after activity stops (10 ticks * 0.5s)
-                active_cooldown = 10
+                # Elevate to profile_standard (1100 MHz stable floor)
+                active_cooldown = 10  # 5 seconds cooldown after stopping
                 set_gpu_profile("profile_standard")
-                keep_alive_pulse()
                 time.sleep(0.5)
             elif active_cooldown > 0:
                 # Cooldown phase
                 active_cooldown -= 1
-                keep_alive_pulse()
                 time.sleep(0.5)
             else:
                 # Completely idle: restore auto power savings
